@@ -3,34 +3,36 @@
  * STACK
  *
  * TODO:
-   * Constructor
-   * Destructor
+   + Constructor
+   + Destructor
    * Validator
-   * Dump
-   *
-   * element access:
-     * top()
-   *
-   * modifiers:
-     * push()
-     * pop()
-   *
-   * capacity:
+   + Dump
+    
+     element access:
+     + top()
+    
+     modifiers:
+     + push()
+     + pop()
+    
+     capacity:
      * empty()
      * size()
-   * 
- *
- * feautes:
+     
+  
+   feautes:
    * marco codogen
    * custom allocator
    * stack allocator
  *
  */
 
-#include <stdlib.h>
+#include <stdlib.h> // calloc, realloc, size_t
+
+#include <string.h> // memset
 
 // TODO: wrap into VERBOSE
-#include <stdio.h>
+#include <stdio.h> // fprintf
 //
 
 typedef int TYPE;
@@ -69,6 +71,9 @@ static void stack_resize(stack *stk, size_t newsize) {
     #endif
 
     stk->arr = reallocarray(stk->arr, newsize, sizeof(TYPE)); // alocator_reallocarray(str->arr, newsize, sizeof(TYPE));
+
+    memset(stk->arr + stk->size, 0, (newsize - stk->size) * sizeof(TYPE));
+
     stk->capacity = newsize;
 }
 
