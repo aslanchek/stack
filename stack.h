@@ -110,8 +110,8 @@ int _stack_validate(stack *stk) {
     return 0; // stack is valid
 }
 
-__attribute__((weak)) void
-_stack_fail(stack *stk,
+__attribute__((weak))
+void _stack_fail(stack *stk,
             const int status,
             const char *methodname,
             const char *filename,
@@ -159,8 +159,8 @@ _stack_fail(stack *stk,
  * }
  *
  */
-__attribute__((weak)) void
-_stack_dump(stack *stk,
+__attribute__((weak))
+void _stack_dump(stack *stk,
             const  char *objname,
             const char *filename,
             const size_t line,
