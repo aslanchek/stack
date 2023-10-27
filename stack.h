@@ -1,5 +1,5 @@
 /*
- * compilation options
+ * compile options
  *   NOMEMZERO - no not perform new allocated memory zeroing
  *   USEDUMP   - enables stack dump facilities
  *   VERBOSE   - enables verbosibility in stack methods
