@@ -1,251 +1,94 @@
-/*
- *
- * STACK
- *
- * NODE BASED STACK:
- * stack = { capacity, size, _head_node }
- *                              |
- *                              |
- *                              V
- *                           _node = { _next_node, data = [ ******** ] }
- *                                          |
- *                                          V
- *                                        _node = { _next_node, data = [ ******** ] }
- *                                                       |
- *                                                       V
- *                                                     _node = { _next_node, data = [ ******** ] }
- *                                                                                  <---------->
- *                                                                                 node data size = 64 bytes
- *
- *
- * TODO:
-   + Constructor
-   + Destructor
-   * Validator
-   + Dump
-    
-     element access:
-     + top()
-    
-     modifiers:
-     + push()
-     + pop()
-    
-     capacity:
-     + empty()
-     + size()
-     
-  
-   feautes:
-   * marco codogen
-   * custom allocator
-   * stack allocator
- *
- */
-
 #include <stdlib.h> // calloc, realloc, size_t
 
-#ifndef FAST
-#include <string.h> // memset
-#endif
+#ifndef STACK_H
+#define STACK_H
 
-#ifdef VERBOSE
-#include <stdio.h> // fprintf
-#endif
 
-typedef int TYPE;
+#define DEFINE_STACK_STRUCT(TYPE)                  \
+typedef struct {                                   \
+    size_t __capacity;                             \
+    size_t __size;                                 \
+    TYPE *__arr;                                   \
+} stack_##TYPE;                                    \
 
-typedef struct {
-    size_t __capacity;
-    size_t __size;
 
-    TYPE *__arr;
+#define DEFINE_STACK_INIT(TYPE)                  \
+__attribute__((weak))                            \
+stack_##TYPE stack_init() {                      \
+    return (stack_##TYPE) {                      \
+        .__capacity = 2,                         \
+        .__size = 0,                             \
+        .__arr = calloc(2, sizeof(TYPE)),        \
+    };                                           \
+}                                                \
 
-} stack;
 
-stack stack_init() {
-    return (stack) {
-        .__capacity = 2,
-        .__size = 0,
-        .__arr = calloc(2, sizeof(TYPE)),
-    };
-}
+#define DEFINE_STACK_DESTROY(TYPE)              \
+__attribute__((weak))                           \
+void stack_destroy(stack_##TYPE *stk) {         \
+    stk->__capacity = 0;                        \
+    stk->__size = 0;                            \
+    free(stk->__arr);                           \
+    stk->__arr = NULL;                          \
+}                                               \
 
-void stack_destroy(stack *stk) {
-    stk->__capacity = 0;
-    stk->__size = 0;
-    free(stk->__arr);
-    stk->__arr = NULL;
-}
-/*
- * #
- * __FILE_NAME__
- * __LINE__
- * __FUNCTION__ (__PRETTY_FUNCTION__ or __func__)
- *
- ***************************************************
- * ---STACK DUMP---
- * 
- * Called from stack_unittest.c:22 (int main())
- * 
- * struct stack [0x7fff7ca947f0] "&SSS" {
- *     capacity = 6
- *     size     = 3
- *     data [0x564a968532a0]
- *     {
- *       *[0] = 5
- *       *[1] = 6
- *       *[2] = 7
- *        [3] = 8 (invalid)
- *        [4] = 9 (invalid)
- *        [5] = 0 (invalid)
- *     }
- * }
- **************************************************
- * TODO
- * ---STACK DUMP---
- * 
- * Called from stack_unittest.c:22 (int main())
- * 
- * struct stack [0x7fff7ca947f0] "&SSS" {
- *     capacity = 100
- *     size     = 55
- *     data [0x564a968532a0]
- *     {
- *       *[0] = 5
- *       *[1] = 6
- *       *[2] = 7
- *       *[3] = 8
- *       *[4] = 8
- *       *[5] = 8
- *       *[6] = 8
- *       *[7] = 8
- *       *[8] = 8
- *       *[9] = 8
- *        ...
- *     }
- * }
- **************************************************
- * TODO
- * ---STACK DUMP---
- * 
- * Called from stack_unittest.c:22 (int main())
- * 
- * struct stack [0x7fff7ca947f0] "&SSS" {
- *     capacity = 100
- *     size     = 1
- *     data [0x564a968532a0]
- *     {
- *       *[0] = 5
- *        [1] = -9999 (invalid)
- *        [2] = -9999 (invalid)
- *        [3] = -9999 (invalid)
- *        [4] = -9999 (invalid)
- *        [5] = -9999 (invalid)
- *        [6] = -9999 (invalid)
- *        [7] = -9999 (invalid)
- *        [8] = -9999 (invalid)
- *        [9] = -9999 (invalid)
- *        ...
- *     }
- * }*
- */
-static void _stack_dump(stack *stk, const  char *objname, const char *filename, const size_t line, const char *funcname) {
-#ifdef VERBOSE
-    
-    fprintf(stderr, 
-        "---STACK DUMP---\n\n"
-        "Called from %s:%zu (%s)\n\n"  // filename, line, funcname
-        "struct stack [%p] \"%s\" {\n"        // stack addr, object varname
-        "  capacity = %zu\n"         // stack capacity
-        "  size     = %zu\n\n"       // stack size
-        "  data [%p] {\n",           // stack data pointer
-        filename, line, funcname, stk, objname, stk->__capacity, stk->__size, stk->__arr);
 
-    for (size_t i = 0; i < stk->__size; i++) {
-        fprintf(stderr, "    *[%zu] = %d\n", i, stk->__arr[i]);
-    }
+#define DEFINE_STACK_EMPTY(TYPE)                \
+__attribute__((weak))                           \
+int stack_empty(stack_##TYPE *stk) {            \
+    return stk->__size == 0;                    \
+}                                               \
 
-    for (size_t i = stk->__size; i < stk->__capacity; i++) {
-        fprintf(stderr, "     [%zu] = %d (invalid)\n", i, stk->__arr[i]);
-    }
 
-    fprintf(stderr, "  }\n}\n");
+#define DEFINE_STACK_SIZE(TYPE)                 \
+__attribute__((weak))                           \
+size_t stack_size(stack_##TYPE *stk) {          \
+    return stk->__size;                         \
+}                                               \
 
-#endif
-}
 
-#ifdef VERBOSE
-#define stack_dump(stk) _stack_dump(stk, #stk+1, __FILE_NAME__, __LINE__, __PRETTY_FUNCTION__)
-#endif
+#define DEFINE_STACK_RESIZE(TYPE)                                 \
+__attribute__((weak))                                             \
+void stack_resize(stack_##TYPE *stk, size_t newsize) {            \
+    stk->__arr = reallocarray(stk->__arr, newsize, sizeof(TYPE)); \
+    stk->__capacity = newsize;                                    \
+}                                                                 \
 
-static int stack_empty(stack *stk) {
-    return stk->__size == 0;
-}
 
-static size_t stack_size(stack *stk) {
-    return stk->__size;
-}
+#define DEFINE_STACK_PUSH(TYPE)                      \
+__attribute__((weak))                                \
+void stack_push(stack_##TYPE*stk, TYPE val) {        \
+    if (stk->__size == stk->__capacity) {            \
+        stack_resize(stk, stk->__capacity * 2);      \
+    }                                                \
+    stk->__arr[stk->__size++] = val;                 \
+};                                                   \
 
-static void stack_resize(stack *stk, size_t newsize) {
-    // asserts:
-    //    stack arr ptr is not null
-    //    stack size < stack capacity;
-    //    
-    // validation:
-    //    _stack_validate(stk);
 
-    #ifdef VERBOSE
-    fprintf(stderr, "---STACK LOG---\nresize to %zu\n", newsize);
-    #endif
+#define DEFINE_STACK_POP(TYPE)             \
+__attribute__((weak))                      \
+void stack_pop(stack_##TYPE*stk) {         \
+    stk->__size--;                         \
+}                                          \
 
-    stk->__arr = reallocarray(stk->__arr, newsize, sizeof(TYPE)); // alocator_reallocarray(str->__arr, newsize, sizeof(TYPE));
 
-    #ifndef FAST
-    memset(stk->__arr + stk->__size, 0, (newsize - stk->__size) * sizeof(TYPE));
-    #endif
+#define DEFINE_STACK_TOP(TYPE)             \
+__attribute__((weak))                      \
+TYPE stack_top(stack_##TYPE*stk) {         \
+    return stk->__arr[stk->__size];        \
+}                                          \
 
-    stk->__capacity = newsize;
-}
 
-static void stack_push(stack *stk, TYPE val) {
-    // asserts
-    // validation
+#define DEFINE_STACK(TYPE)    \
+    DEFINE_STACK_STRUCT(TYPE) \
+    DEFINE_STACK_INIT(TYPE)   \
+    DEFINE_STACK_DESTROY(TYPE)\
+    DEFINE_STACK_EMPTY(TYPE)  \
+    DEFINE_STACK_SIZE(TYPE)   \
+    DEFINE_STACK_RESIZE(TYPE) \
+    DEFINE_STACK_PUSH(TYPE)   \
+    DEFINE_STACK_POP(TYPE)    \
+    DEFINE_STACK_TOP(TYPE)    \
 
-    #ifdef VERBOSE
-    fprintf(stderr, "---STACK LOG---\npush %d\n", val);
-    #endif
-
-    if (stk->__size == stk->__capacity) {
-        stack_resize(stk, stk->__capacity * 2);
-    }
-
-    stk->__arr[stk->__size++] = val; // allocator_construct(stk->__arr + stk->__size++, val);
-
-    return /* status code */;
-};
-
-static void stack_pop(stack *stk) {
-
-    #ifdef VERBOSE
-    fprintf(stderr, "---STACK LOG---\npop\n");
-    #endif
-
-    stk->__size--;
-}
-
-static TYPE stack_top(stack *stk) {
-    // asserts:
-    //    stack arr ptr is not null
-    //    stack size < stack capacity;
-    //    
-    // validation:
-    //    _stack_validate(stk);
-
-    #ifdef VERBOSE
-    fprintf(stderr, "---STACK LOG---\ntop -> %d\n", stk->__arr[stk->__size]);
-    #endif
-
-    return stk->__arr[stk->__size];
-}
+#endif // STACK_H
 
