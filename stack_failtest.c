@@ -1,23 +1,30 @@
-#include "stack.h"
+#include "stack.c"
+
+DEFINE_STACK(int, "%d")
+
+typedef struct {
+    char buffer[64];
+    stack_int ststststst;
+} AAAAAAA;
+
 
 int main() {
-    stack ststststst = stack_init();
 
-    stack_push(&ststststst, 5);
-    stack_push(&ststststst, 6);
-    stack_push(&ststststst, 7);
+    stack_int stk = stack_int_init();
 
-    STACK_DUMP(&ststststst);
+    stack_int_push(&stk, 5);
+    stack_int_push(&stk, 6);
+    stack_int_push(&stk, 7);
 
-    stack_pop(&ststststst);
+    STACK_DUMP(&stk, int);
 
-    STACK_DUMP(&ststststst);
+    //char *addr = (char *) stk.__data_cnr1;
+    //*addr = 0xbb;
+    stk.__arr = NULL;
 
-    ststststst.__arr = NULL;
+    stack_int_push(&stk, 8);
 
-    stack_push(&ststststst, 1337);
-
-    stack_destroy(&ststststst);
+    stack_int_destroy(&stk);
     return 0;
 }
 
