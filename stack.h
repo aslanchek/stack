@@ -272,7 +272,7 @@ void _stack_##TYPE##_dump(\
 }\
 
 
-#define LOGINFO __FILE_NAME__, __LINE__, __PRETTY_FUNCTION__
+#define LOGINFO __FILE__, __LINE__, __PRETTY_FUNCTION__
 
 
 #define STACK_DUMP(stk, TYPE)\
