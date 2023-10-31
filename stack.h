@@ -43,11 +43,59 @@ typedef size_t CANARY_TYPE;
 
 #ifdef HASH
 #define IF_HASH(...) __VA_ARGS__
+
 #define ELSE_HASH(...)
-#else
+unsigned int MurmurHash2 (char * key, unsigned int len) {
+    const unsigned int m = 0x5bd1e995;
+    const unsigned int seed = 0;
+    const unsigned int r = 24;
+
+    unsigned int h = seed ^ len;
+
+    const unsigned char * data = (const unsigned char *)key;
+    unsigned int k = 0;
+
+    while (len >= 4) {
+        k  = (unsigned int)data[0];
+        k |= (unsigned int)data[1] << 8;
+        k |= (unsigned int)data[2] << 16;
+        k |= (unsigned int)data[3] << 24;
+
+        k *= m;
+        k ^= k >> r;
+        k *= m;
+
+        h *= m;
+        h ^= k;
+
+        data += 4;
+        len -= 4;
+    }
+
+    switch (len) {
+        case 3:
+            h ^= (unsigned int)data[2] << 16;
+            __attribute__ ((fallthrough));
+        case 2:
+            h ^= (unsigned int)data[1] << 8;
+            __attribute__ ((fallthrough));
+        case 1:
+            h ^= (unsigned int)data[0];
+            h *= m;
+        default:
+            break;
+    };
+
+    h ^= h >> 13;
+    h *= m;
+    h ^= h >> 15;
+
+    return h;
+}
+#else  // HASH
 #define IF_HASH(...)
 #define ELSE_HASH(...) __VA_ARGS__
-#endif
+#endif // HASH
 
 #define DEFINE_STACK_STRUCT(TYPE)\
   typedef struct {\
@@ -193,7 +241,7 @@ void _stack_##TYPE##_dump(\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
     if (vcode) {\
-          _stack_##TYPE##_fail(stk, vcode, "stack_dump()"IF_VERBOSE(, filename, line, funcname) );\
+          _stack_##TYPE##_fail(stk, vcode, "stack_dump()" IF_VERBOSE(, filename, line, funcname) );\
     })\
     fprintf(stderr, LOG_PATTERN "stack_dump()\n", filename, line, funcname);\
     fprintf(stderr, "struct [%p] \"%s\" {\n", stk, objname);\
@@ -272,7 +320,7 @@ size_t stack_##TYPE##_size(stack_##TYPE *stk\
   }\
 
 
-#define DEFINE_STACK_RESIZE(TYPE, TYPE_FORMAT)                                 \
+#define DEFINE_STACK_RESIZE(TYPE, TYPE_FORMAT)\
  __attribute__((weak))\
 void stack_##TYPE##_resize(stack_##TYPE *stk, size_t newcpct\
         IF_VERBOSE(, const char *filename,)\
