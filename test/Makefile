@@ -14,3 +14,6 @@ stress: stress.c
 
 fail_canary: fail_canary.c
 	gcc -I../ -D VERBOSE -D CANARY -D NDEBUG $^ -o $@
+
+fail_integrity: fail_integrity.c
+	gcc -I../ -D VERBOSE -D CANARY -D NDEBUG $^ -o $@

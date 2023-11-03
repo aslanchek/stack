@@ -6,11 +6,11 @@
  *   VALIDATE  - perform stack integrity validation per each method
  *   NDEBUG    - ignore all asserts from <assert.h>
  *   CANARY    - use buffer overflow protection with canaries
+ *   HASH      - use hash protection (leads to significant performance drawdown)
  *
  * TODO:
  *   DEBUG
  *   HASH
- *   CANARY
  *
  */
 #ifndef MACROMAGIC_STACK_H
@@ -41,9 +41,47 @@ typedef size_t CANARY_TYPE;
 #define ELSE_CANARY(...) __VA_ARGS__
 #endif
 
+
+#ifdef VALIDATE
+#define IF_VALIDATE(...) __VA_ARGS__
+#define ELSE_VALIDATE(...)
+#else
+#define IF_VALIDATE(...)
+#define ELSE_VALIDATE(...) __VA_ARGS__
+#endif
+
+
+typedef enum {
+    STATUS_OK        = 0, // stack is valid
+    STATUS_INVSTKP   = 1, // invalid stack pointer
+    STATUS_INVDP     = 2, // invalid data pointer
+    STATUS_ZEROCAP   = 3, // zero capacity 
+    STATUS_INVSCREL  = 4, // invalid size-capacity relation
+    STATUS_INVDLCNR  = 5, // data left canary invalidated
+    STATUS_INVDRCNR  = 6, // data right canary invalidated
+    STATUS_BFOVFLLC  = 7, // buffer overflow attack detected: left canary invaded
+    STATUS_BFOVFLRC  = 8, // buffer overflow attack detected: right canary invaded
+    STATUS_POPEMPTY  = 9, // pop empty stack
+    STATUS_EMPTYACS  = 10,// accessing empty stack
+} STATUS;
+
+
+static char *STRSTATUS[] = {
+   /*0*/ "stack is valid",
+   /*1*/ "invalid stack pointer",
+   /*2*/ "invalid data pointer",
+   /*3*/ "zero capacity ",
+   /*4*/ "invalid size-capacity relation",
+   /*5*/ "data left canary invalidated",
+   /*6*/ "data right canary invalidated",
+   /*7*/ "buffer overflow attack detected: left canary invaded",
+   /*8*/ "buffer overflow attack detected: right canary invaded",
+   /*9*/ "pop empty stack",
+   /*10*/ "accessing empty stack",
+};
+
 #ifdef HASH
 #define IF_HASH(...) __VA_ARGS__
-
 #define ELSE_HASH(...)
 unsigned int MurmurHash2 (char * key, unsigned int len) {
     const unsigned int m = 0x5bd1e995;
@@ -154,41 +192,53 @@ void stack_##TYPE##_destroy(stack_##TYPE *stk) {\
     stk->__arr = NULL;\
 }\
 
+
 IF_CANARY(
-int _stack_canary_invalid(const CANARY_TYPE *ptr) {
-  return *ptr != STATIC_CANARY_VAL;
+int _stack_canary_validate(const CANARY_TYPE *ptr) {
+  return *ptr == STATIC_CANARY_VAL;
 })
 
-// returns 0 on valid integrity
+
 #define DEFINE_STACK_VALIDATE(TYPE)\
 __attribute__((weak))\
-int stack_##TYPE##_validate(stack_##TYPE *stk) {\
+STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
     assert(stk);\
     assert(stk->__arr);\
+    assert(stk->__cpct);\
+    assert(!(stk->__cpct < stk->__size));\
+    IF_CANARY(\
+    assert(stk->__data_cnr1);\
+    assert(stk->__data_cnr2);\
+    assert(_stack_canary_validate(stk->__data_cnr1));\
+    assert(_stack_canary_validate(stk->__data_cnr2));\
+    )\
     if (!stk) {\
-      return 1;\
+        return STATUS_INVSTKP;\
     }\
     if (!stk->__arr) {\
-      return 2 /*invalid data pointer*/;\
+        return STATUS_INVDP;\
     }\
     if (stk->__cpct == 0) {\
-      return 3 /*zero capacity*/;\
+        return STATUS_ZEROCAP;\
     }\
     if (stk->__cpct < stk->__size) {\
-      return 4 /*invalid size-capacity relation*/;\
+        return STATUS_INVSCREL;\
     }\
     IF_CANARY(\
     if (!stk->__data_cnr1) {\
-       return 6 /*left canary invalidated*/;\
-    } if (!stk->__data_cnr2) {\
-        return 6 /*left canary invalidated*/;\
-    } if (_stack_canary_invalid(stk->__data_cnr1)) {\
-       return 7 /*buffer overflow attack detected: left canary invaded*/;\
-    } if (_stack_canary_invalid(stk->__data_cnr2)) {\
-       return 8 /*buffer overflow attack detected: right canary invaded*/;  \
+        return STATUS_INVDLCNR;\
+    }\
+    if (!stk->__data_cnr2) {\
+        return STATUS_INVDRCNR;\
+    }\
+    if (!_stack_canary_validate(stk->__data_cnr1)) {\
+        return STATUS_BFOVFLLC;\
+    }\
+    if (!_stack_canary_validate(stk->__data_cnr2)) {\
+        return STATUS_BFOVFLRC;\
     }\
     )\
-    return 0 /*stack is valid*/;\
+    return STATUS_OK;\
   }\
 
 #ifdef VERBOSE
@@ -202,19 +252,21 @@ int stack_##TYPE##_validate(stack_##TYPE *stk) {\
 #define DEFINE_STACK_FAIL(TYPE)\
 __attribute__((weak))\
 void _stack_##TYPE##_fail(\
-      stack_##TYPE *stk, const int status, const char *methodname\
+      stack_##TYPE *stk, const STATUS status, const char *methodname\
       IF_VERBOSE(, const char *filename, const size_t line, const char *funcname)\
     ) {\
     IF_VERBOSE(\
     fprintf(stderr, RED("[stack fail]") " %s:%zu in (%s): Validation "\
-                                        "failed: %s status code: %d\n", \
-                       filename, line, funcname, methodname, status);\
+                                        "failed: %s status: %s[%d]\n", \
+                       filename, line, funcname, methodname, STRSTATUS[status], status);\
     )\
     abort();\
   }
 
+
 #define LOG_PATTERN "[stack log] %s:%zu in (%s): "
 #define LOG_RETURNS " -> "
+
 
 #ifdef USEDUMP
 #define IF_USEDUMP(...) __VA_ARGS__
@@ -224,19 +276,14 @@ void _stack_##TYPE##_fail(\
 #define ELSE_USEDUMP(...) __VA_ARGS__
 #endif
 
-#ifdef VALIDATE
-#define IF_VALIDATE(...) __VA_ARGS__
-#define ELSE_VALIDATE(...)
-#else
-#define IF_VALIDATE(...)
-#define ELSE_VALIDATE(...) __VA_ARGS__
-#endif
 
 #define DEFINE_STACK_DUMP(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
-void _stack_##TYPE##_dump(\
-    stack_##TYPE *stk, const char *objname, const char *filename,\
-    const size_t line, const char *funcname) {\
+void _stack_##TYPE##_dump(stack_##TYPE *stk,\
+        const char *objname,\
+        const char *filename,\
+        const size_t line,\
+        const char *funcname) {\
     IF_USEDUMP(\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
@@ -244,7 +291,7 @@ void _stack_##TYPE##_dump(\
           _stack_##TYPE##_fail(stk, vcode, "stack_dump()" IF_VERBOSE(, filename, line, funcname) );\
     })\
     fprintf(stderr, LOG_PATTERN "stack_dump()\n", filename, line, funcname);\
-    fprintf(stderr, "struct [%p] \"%s\" {\n", stk, objname);\
+    fprintf(stderr, "stack<"#TYPE"> [%p] \"%s\" {\n", stk, objname);\
     fprintf(stderr,\
         "  capacity = %zu\n"\
         "  size     = %zu\n"\
@@ -275,16 +322,13 @@ void _stack_##TYPE##_dump(\
 #define LOGINFO __FILE__, __LINE__, __PRETTY_FUNCTION__
 
 
-#define STACK_DUMP(stk, TYPE)\
-_stack_##TYPE##_dump(stk, (#stk), LOGINFO)
+#define STACK_DUMP(stk, TYPE) _stack_##TYPE##_dump(stk, (#stk), LOGINFO)
 
 
 #define DEFINE_STACK_EMPTY(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
 int stack_##TYPE##_empty(stack_##TYPE *stk\
-        IF_VERBOSE(, const char *filename,)\
-        IF_VERBOSE(size_t fileline,)\
-        IF_VERBOSE(const char *funcname)\
+        IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
@@ -304,9 +348,7 @@ int stack_##TYPE##_empty(stack_##TYPE *stk\
 #define DEFINE_STACK_SIZE(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
 size_t stack_##TYPE##_size(stack_##TYPE *stk\
-        IF_VERBOSE(, const char *filename,)\
-        IF_VERBOSE(size_t fileline,)\
-        IF_VERBOSE(const char *funcname)\
+        IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
@@ -323,9 +365,7 @@ size_t stack_##TYPE##_size(stack_##TYPE *stk\
 #define DEFINE_STACK_RESIZE(TYPE, TYPE_FORMAT)\
  __attribute__((weak))\
 void stack_##TYPE##_resize(stack_##TYPE *stk, size_t newcpct\
-        IF_VERBOSE(, const char *filename,)\
-        IF_VERBOSE(size_t fileline,)\
-        IF_VERBOSE(const char *funcname)\
+        IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
@@ -354,9 +394,7 @@ void stack_##TYPE##_resize(stack_##TYPE *stk, size_t newcpct\
 #define DEFINE_STACK_PUSH(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
 void stack_##TYPE##_push(stack_##TYPE *stk, TYPE val\
-        IF_VERBOSE(,const char *filename,)\
-        IF_VERBOSE(size_t fileline,)\
-        IF_VERBOSE(const char *funcname)\
+        IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
@@ -383,9 +421,7 @@ void stack_##TYPE##_push(stack_##TYPE *stk, TYPE val\
 #define DEFINE_STACK_POP(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
 void stack_##TYPE##_pop(stack_##TYPE *stk\
-        IF_VERBOSE(,const char *filename,)\
-        IF_VERBOSE(size_t fileline,)\
-        IF_VERBOSE(const char *funcname)\
+        IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
@@ -393,7 +429,7 @@ void stack_##TYPE##_pop(stack_##TYPE *stk\
         _stack_##TYPE##_fail(stk, vcode, "stack_" #TYPE "_pop()" IF_VERBOSE(, filename, fileline, funcname) );\
     }\
     if (stk->__size == 0) {\
-        _stack_##TYPE##_fail(stk, /*pop empty stack*/ 5, "stack_pop()" IF_VERBOSE(, filename, fileline, funcname) );\
+        _stack_##TYPE##_fail(stk, STATUS_POPEMPTY, "stack_pop()" IF_VERBOSE(, filename, fileline, funcname) );\
         }\
     )\
     IF_VERBOSE(\
@@ -414,17 +450,15 @@ void stack_##TYPE##_pop(stack_##TYPE *stk\
 #define DEFINE_STACK_TOP(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
 TYPE stack_##TYPE##_top(stack_##TYPE *stk\
-        IF_VERBOSE(, const char *filename,)\
-        IF_VERBOSE(size_t fileline,)\
-        IF_VERBOSE(const char *funcname)\
+        IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
     if (vcode) {\
         _stack_##TYPE##_fail(stk, vcode, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname) );\
     }\
-    if (stk->__size == 0) {                                              \
-        _stack_##TYPE##_fail(stk, /*accessing empty stack*/ 6, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname ));\
+    if (stk->__size == 0) {\
+        _stack_##TYPE##_fail(stk, STATUS_EMPTYACS, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname ));\
         }\
     )\
     IF_VERBOSE(\
