@@ -24,6 +24,10 @@
 #include <stdio.h> // fprintf
 #endif
 
+#ifdef HASH
+#include <stdint.h>
+#endif
+
 #define ANSI_COLOR_RED "\x1b[31m"
 #define ANSI_COLOR_YLW "\x1b[33m"
 #define ANSI_COLOR_RST "\x1b[0m"
@@ -80,24 +84,25 @@ static char *STRSTATUS[] = {
    /*10*/ "accessing empty stack",
 };
 
+
 #ifdef HASH
 #define IF_HASH(...) __VA_ARGS__
 #define ELSE_HASH(...)
-unsigned int MurmurHash2 (char * key, unsigned int len) {
-    const unsigned int m = 0x5bd1e995;
-    const unsigned int seed = 0;
-    const unsigned int r = 24;
+unsigned int MurmurHash2 (char * key, size_t len) {
+    const uint32_t m = 0x5bd1e995;
+    const uint32_t seed = 0;
+    const uint32_t r = 24;
 
-    unsigned int h = seed ^ len;
+    uint32_t h = seed ^ len;
 
     const unsigned char * data = (const unsigned char *)key;
-    unsigned int k = 0;
+    uint32_t k = 0;
 
     while (len >= 4) {
-        k  = (unsigned int)data[0];
-        k |= (unsigned int)data[1] << 8;
-        k |= (unsigned int)data[2] << 16;
-        k |= (unsigned int)data[3] << 24;
+        k  = (uint32_t)data[0];
+        k |= (uint32_t)data[1] << 8;
+        k |= (uint32_t)data[2] << 16;
+        k |= (uint32_t)data[3] << 24;
 
         k *= m;
         k ^= k >> r;
@@ -112,13 +117,13 @@ unsigned int MurmurHash2 (char * key, unsigned int len) {
 
     switch (len) {
         case 3:
-            h ^= (unsigned int)data[2] << 16;
+            h ^= (uint32_t)data[2] << 16;
             __attribute__ ((fallthrough));
         case 2:
-            h ^= (unsigned int)data[1] << 8;
+            h ^= (uint32_t)data[1] << 8;
             __attribute__ ((fallthrough));
         case 1:
-            h ^= (unsigned int)data[0];
+            h ^= (uint32_t)data[0];
             h *= m;
         default:
             break;
@@ -242,6 +247,7 @@ STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
   }\
 
 #ifdef VERBOSE
+#define NDEBUG
 #define IF_VERBOSE(...) __VA_ARGS__
 #define ELSE_VERBOSE(...)
 #else
@@ -299,9 +305,7 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk,\
         stk->__cpct, stk->__size, stk->__arr);\
     IF_CANARY(\
     fprintf(stderr, "    canary1 = %s\n",\
-        _stack_canary_invalid(stk->__data_cnr2)\
-        ? "failed"\
-        : "ok");\
+        _stack_canary_validate(stk->__data_cnr1) ? "ok" : "failed");\
     )\
     for (size_t i = 0; i < stk->__size; i++) {\
         fprintf(stderr, "    *[%zu] = " TYPE_FORMAT "\n", i, stk->__arr[i]);\
@@ -311,7 +315,7 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk,\
     }\
     IF_CANARY(\
     fprintf(stderr, "    canary2 = %s\n",\
-        _stack_canary_invalid(stk->__data_cnr2) ? "failed" : "ok");\
+        _stack_canary_validate(stk->__data_cnr2) ? "ok" : "failed");\
     )\
     fprintf(stderr, "  }\n");\
     fprintf(stderr, "}\n");\
