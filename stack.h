@@ -4,6 +4,7 @@
  *   USEDUMP   - enables stack dump facilities
  *   VERBOSE   - enables verbosibility in stack methods
  *   VALIDATE  - perform stack integrity validation per each method
+ *   NOFAIL    - do not invoke abort() on validation fails
  *   NDEBUG    - ignore all asserts from <assert.h>
  *   CANARY    - use buffer overflow protection with canaries
  *   HASH      - use hash protection (leads to significant performance drawdown)
@@ -56,22 +57,22 @@ typedef size_t CANARY_TYPE;
 
 
 typedef enum {
-    STATUS_OK        = 0, // stack is valid
-    STATUS_INVSTKP   = 1, // invalid stack pointer
-    STATUS_INVDP     = 2, // invalid data pointer
-    STATUS_ZEROCAP   = 3, // zero capacity 
-    STATUS_INVSCREL  = 4, // invalid size-capacity relation
-    STATUS_INVDLCNR  = 5, // data left canary invalidated
-    STATUS_INVDRCNR  = 6, // data right canary invalidated
-    STATUS_BFOVFLLC  = 7, // buffer overflow attack detected: left canary invaded
-    STATUS_BFOVFLRC  = 8, // buffer overflow attack detected: right canary invaded
-    STATUS_POPEMPTY  = 9, // pop empty stack
-    STATUS_EMPTYACS  = 10,// accessing empty stack
-} STATUS;
+    STACK_STATUS_OK        = 0,
+    STACK_STATUS_INVSTKP   = 1, // invalid stack pointer
+    STACK_STATUS_INVDP     = 2, // invalid data pointer
+    STACK_STATUS_ZEROCAP   = 3, // zero capacity 
+    STACK_STATUS_INVSCREL  = 4, // invalid size-capacity relation
+    STACK_STATUS_INVDLCNR  = 5, // data left canary invalidated
+    STACK_STATUS_INVDRCNR  = 6, // data right canary invalidated
+    STACK_STATUS_BFOVFLLC  = 7, // buffer overflow attack detected: left canary invaded
+    STACK_STATUS_BFOVFLRC  = 8, // buffer overflow attack detected: right canary invaded
+    STACK_STATUS_POPEMPTY  = 9, // pop empty stack
+    STACK_STATUS_EMPTYACS  = 10,// accessing empty stack
+} STACK_STATUS;
 
 
-static char *STRSTATUS[] = {
-   /*0*/ "stack is valid",
+static char *STRSTACK_STATUS[] = {
+   /*0*/ "OK",
    /*1*/ "invalid stack pointer",
    /*2*/ "invalid data pointer",
    /*3*/ "zero capacity ",
@@ -83,6 +84,11 @@ static char *STRSTATUS[] = {
    /*9*/ "pop empty stack",
    /*10*/ "accessing empty stack",
 };
+
+
+char *stack_status2str(STACK_STATUS sts) {
+    return STRSTACK_STATUS[sts];
+}
 
 
 #ifdef HASH
@@ -139,6 +145,7 @@ unsigned int MurmurHash2 (char * key, size_t len) {
 #define IF_HASH(...)
 #define ELSE_HASH(...) __VA_ARGS__
 #endif // HASH
+
 
 #define DEFINE_STACK_STRUCT(TYPE)\
   typedef struct {\
@@ -200,13 +207,13 @@ void stack_##TYPE##_destroy(stack_##TYPE *stk) {\
 
 IF_CANARY(
 int _stack_canary_validate(const CANARY_TYPE *ptr) {
-  return *ptr == STATIC_CANARY_VAL;
+    return *ptr == STATIC_CANARY_VAL;
 })
 
 
 #define DEFINE_STACK_VALIDATE(TYPE)\
 __attribute__((weak))\
-STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
+STACK_STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
     assert(stk);\
     assert(stk->__arr);\
     assert(stk->__cpct);\
@@ -218,32 +225,32 @@ STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
     assert(_stack_canary_validate(stk->__data_cnr2));\
     )\
     if (!stk) {\
-        return STATUS_INVSTKP;\
+        return STACK_STATUS_INVSTKP;\
     }\
     if (!stk->__arr) {\
-        return STATUS_INVDP;\
+        return STACK_STATUS_INVDP;\
     }\
     if (stk->__cpct == 0) {\
-        return STATUS_ZEROCAP;\
+        return STACK_STATUS_ZEROCAP;\
     }\
     if (stk->__cpct < stk->__size) {\
-        return STATUS_INVSCREL;\
+        return STACK_STATUS_INVSCREL;\
     }\
     IF_CANARY(\
     if (!stk->__data_cnr1) {\
-        return STATUS_INVDLCNR;\
+        return STACK_STATUS_INVDLCNR;\
     }\
     if (!stk->__data_cnr2) {\
-        return STATUS_INVDRCNR;\
+        return STACK_STATUS_INVDRCNR;\
     }\
     if (!_stack_canary_validate(stk->__data_cnr1)) {\
-        return STATUS_BFOVFLLC;\
+        return STACK_STATUS_BFOVFLLC;\
     }\
     if (!_stack_canary_validate(stk->__data_cnr2)) {\
-        return STATUS_BFOVFLRC;\
+        return STACK_STATUS_BFOVFLRC;\
     }\
     )\
-    return STATUS_OK;\
+    return STACK_STATUS_OK;\
   }\
 
 #ifdef VERBOSE
@@ -255,18 +262,18 @@ STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
 #define ELSE_VERBOSE(...) __VA_ARGS__
 #endif
 
-#define DEFINE_STACK_FAIL(TYPE)\
-__attribute__((weak))\
-void _stack_##TYPE##_fail(\
-      stack_##TYPE *stk, const STATUS status, const char *methodname\
-      IF_VERBOSE(, const char *filename, const size_t line, const char *funcname)\
-    ) {\
-    IF_VERBOSE(\
-    fprintf(stderr, RED("[stack fail]") " %s:%zu in (%s): Validation "\
-                                        "failed: %s status: %s[%d]\n", \
-                       filename, line, funcname, methodname, STRSTATUS[status], status);\
-    )\
-    abort();\
+__attribute__((weak))
+void _stack_fail(const STACK_STATUS status, const char *methodname
+      IF_VERBOSE(, const char *filename, const size_t fileline, const char *funcname)
+    ) {
+    IF_VERBOSE(
+    fprintf(stderr, RED("[stack fail]") " %s:%zu in (%s): Validation "
+                                        "failed: %s status: %s[%d]\n", 
+                       filename, fileline, funcname, methodname, stack_status2str(status), status);
+    )
+    #ifndef NOFAIL
+    abort();
+    #endif
   }
 
 
@@ -283,42 +290,75 @@ void _stack_##TYPE##_fail(\
 #endif
 
 
+// 
 #define DEFINE_STACK_DUMP(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
-void _stack_##TYPE##_dump(stack_##TYPE *stk,\
+void _stack_##TYPE##_dump(stack_##TYPE *stk, STACK_STATUS statuscode,\
         const char *objname,\
         const char *filename,\
-        const size_t line,\
+        const size_t fileline,\
         const char *funcname) {\
     IF_USEDUMP(\
-    IF_VALIDATE(\
-    int vcode = stack_##TYPE##_validate(stk);\
-    if (vcode) {\
-          _stack_##TYPE##_fail(stk, vcode, "stack_dump()" IF_VERBOSE(, filename, line, funcname) );\
-    })\
-    fprintf(stderr, LOG_PATTERN "stack_dump()\n", filename, line, funcname);\
-    fprintf(stderr, "stack<"#TYPE"> [%p] \"%s\" {\n", stk, objname);\
+    \
+    \
+    fprintf(stderr, LOG_PATTERN "stack_dump()\n", filename, fileline, funcname);\
+    fprintf(stderr, "---STACK DUMP---\n");\
+    fprintf(stderr, "STATUS: %s\n", stack_status2str(statuscode));\
+    fprintf(stderr, "stack<"#TYPE"> [%p] ", stk);\
+    if (objname) {\
+        fprintf(stderr, "\"%s\"", objname);\
+    }\
+    if (statuscode == STACK_STATUS_INVSTKP) {\
+        fprintf(stderr, "\n");\
+        return;\
+    }\
+    fprintf(stderr, " {\n");\
     fprintf(stderr,\
         "  capacity = %zu\n"\
         "  size     = %zu\n"\
-        "  data [%p] {\n",\
+        "  data [%p]",\
         stk->__cpct, stk->__size, stk->__arr);\
+    if (statuscode == STACK_STATUS_INVDP) {\
+        fprintf(stderr, "\n");\
+        return;\
+    }\
+    fprintf(stderr, " {\n");\
     IF_CANARY(\
-    fprintf(stderr, "    canary1 = %s\n",\
-        _stack_canary_validate(stk->__data_cnr1) ? "ok" : "failed");\
+    if (statuscode == STACK_STATUS_INVDLCNR) {\
+        fprintf(stderr, "    canary1 = %s\n", "failed");\
+    } else {\
+        fprintf(stderr, "    canary1 = %s\n", _stack_canary_validate(stk->__data_cnr1) ? "ok" : "failed");\
+    }\
     )\
-    for (size_t i = 0; i < stk->__size; i++) {\
-        fprintf(stderr, "    *[%zu] = " TYPE_FORMAT "\n", i, stk->__arr[i]);\
-    }\
-    for (size_t i = stk->__size; i < stk->__cpct; i++) {\
-        fprintf(stderr, "     [%zu] = " TYPE_FORMAT "\n", i, stk->__arr[i]);\
+    if (statuscode != STACK_STATUS_ZEROCAP) {\
+        if (statuscode == STACK_STATUS_INVSCREL) {\
+            size_t maxlen = stk->__cpct;\
+            for (size_t i = 0; i < maxlen; i++) {\
+                fprintf(stderr, "    ?[%zu] = " TYPE_FORMAT "\n", i, stk->__arr[i]);\
+            }\
+        } else {\
+            size_t maxlen = stk->__cpct < 10 ? stk->__cpct : 10;\
+            for (size_t i = 0; i < stk->__size; i++) {\
+                fprintf(stderr, "    *[%zu] = " TYPE_FORMAT "\n", i, stk->__arr[i]);\
+            }\
+            for (size_t i = stk->__size; i < maxlen; i++) {\
+                fprintf(stderr, "     [%zu] = " TYPE_FORMAT "\n", i, stk->__arr[i]);\
+            }\
+        }\
+    } else {\
+        fprintf(stderr, "     invalid data...\n");\
     }\
     IF_CANARY(\
-    fprintf(stderr, "    canary2 = %s\n",\
-        _stack_canary_validate(stk->__data_cnr2) ? "ok" : "failed");\
+    if (statuscode == STACK_STATUS_INVDRCNR) {\
+        fprintf(stderr, "    canary2 = %s\n", "failed");\
+    } else {\
+        fprintf(stderr, "    canary2 = %s\n", _stack_canary_validate(stk->__data_cnr2) ? "ok" : "failed");\
+    }\
     )\
     fprintf(stderr, "  }\n");\
     fprintf(stderr, "}\n");\
+    \
+    \
     )\
 }\
 
@@ -326,7 +366,7 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk,\
 #define LOGINFO __FILE__, __LINE__, __PRETTY_FUNCTION__
 
 
-#define STACK_DUMP(stk, TYPE) _stack_##TYPE##_dump(stk, (#stk), LOGINFO)
+#define STACK_DUMP(stk, TYPE) _stack_##TYPE##_dump(stk, 0, (#stk), LOGINFO)
 
 
 #define DEFINE_STACK_EMPTY(TYPE, TYPE_FORMAT)\
@@ -337,7 +377,9 @@ int stack_##TYPE##_empty(stack_##TYPE *stk\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
     if (vcode){\
-        _stack_##TYPE##_fail(stk, vcode, "stack_" #TYPE "empty()" IF_VERBOSE(, filename, fileline, funcname) );\
+        _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_empty()");\
+        _stack_fail(vcode, "stack_" #TYPE "_empty()" IF_VERBOSE(, filename, fileline, funcname) );\
+        return -1;\
     }\
     )\
     IF_VERBOSE(\
@@ -357,7 +399,9 @@ size_t stack_##TYPE##_size(stack_##TYPE *stk\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
     if (vcode) {\
-        _stack_##TYPE##_fail(stk, vcode, "stack_" #TYPE "size()" IF_VERBOSE(, filename, fileline, funcname) );\
+        _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_size()");\
+        _stack_fail(vcode, "stack_" #TYPE "size()" IF_VERBOSE(, filename, fileline, funcname) );\
+        return -1;\
     })\
     IF_VERBOSE(\
     fprintf(stderr,LOG_PATTERN "stack_" #TYPE "_size()" LOG_RETURNS "%zu" "\n", filename, fileline, funcname, stk->__size);\
@@ -368,13 +412,15 @@ size_t stack_##TYPE##_size(stack_##TYPE *stk\
 
 #define DEFINE_STACK_RESIZE(TYPE, TYPE_FORMAT)\
  __attribute__((weak))\
-void stack_##TYPE##_resize(stack_##TYPE *stk, size_t newcpct\
+int stack_##TYPE##_resize(stack_##TYPE *stk, size_t newcpct\
         IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
     if (vcode) {\
-        _stack_##TYPE##_fail(stk, vcode, "stack_"#TYPE"_resize()" IF_VERBOSE(, filename, fileline, funcname) );\
+        _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_resize()");\
+        _stack_fail(vcode, "stack_"#TYPE"_resize()" IF_VERBOSE(, filename, fileline, funcname) );\
+        return -1;\
     }\
     )\
     IF_VERBOSE(\
@@ -397,13 +443,15 @@ void stack_##TYPE##_resize(stack_##TYPE *stk, size_t newcpct\
 
 #define DEFINE_STACK_PUSH(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
-void stack_##TYPE##_push(stack_##TYPE *stk, TYPE val\
+int stack_##TYPE##_push(stack_##TYPE *stk, TYPE val\
         IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
-    int vcode = stack_##TYPE##_validate(stk);\
-    if (vcode) {         \
-        _stack_##TYPE##_fail(stk, vcode, "stack_"#TYPE"_push()" IF_VERBOSE(, filename, fileline, funcname) );\
+    STACK_STATUS vcode = stack_##TYPE##_validate(stk);\
+    if (vcode) {\
+        _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_push()");\
+        _stack_fail(vcode, "stack_"#TYPE"_push()" IF_VERBOSE(, filename, fileline, funcname) );\
+        return -1;\
     }\
     )\
     IF_VERBOSE(\
@@ -419,21 +467,25 @@ void stack_##TYPE##_push(stack_##TYPE *stk, TYPE val\
         )\
     }\
     stk->__arr[stk->__size++] = val;\
-    return /* status code */;\
+    return 1;\
   }\
 
 #define DEFINE_STACK_POP(TYPE, TYPE_FORMAT)\
 __attribute__((weak))\
-void stack_##TYPE##_pop(stack_##TYPE *stk\
+int stack_##TYPE##_pop(stack_##TYPE *stk\
         IF_VERBOSE(, const char *filename, size_t fileline, const char *funcname)\
     ) {\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
     if (vcode) {\
-        _stack_##TYPE##_fail(stk, vcode, "stack_" #TYPE "_pop()" IF_VERBOSE(, filename, fileline, funcname) );\
+        _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_pop()");\
+        _stack_fail(vcode, "stack_" #TYPE "_pop()" IF_VERBOSE(, filename, fileline, funcname) );\
+        return -1;\
     }\
     if (stk->__size == 0) {\
-        _stack_##TYPE##_fail(stk, STATUS_POPEMPTY, "stack_pop()" IF_VERBOSE(, filename, fileline, funcname) );\
+        _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_empty()");\
+        _stack_fail(STACK_STATUS_POPEMPTY, "stack_pop()" IF_VERBOSE(, filename, fileline, funcname) );\
+        return -1;\
         }\
     )\
     IF_VERBOSE(\
@@ -459,10 +511,12 @@ TYPE stack_##TYPE##_top(stack_##TYPE *stk\
     IF_VALIDATE(\
     int vcode = stack_##TYPE##_validate(stk);\
     if (vcode) {\
-        _stack_##TYPE##_fail(stk, vcode, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname) );\
+        _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_top()");\
+        _stack_fail(vcode, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname) );\
+        return (TYPE)-1;\
     }\
     if (stk->__size == 0) {\
-        _stack_##TYPE##_fail(stk, STATUS_EMPTYACS, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname ));\
+        _stack_fail(STACK_STATUS_EMPTYACS, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname ));\
         }\
     )\
     IF_VERBOSE(\
@@ -478,7 +532,6 @@ TYPE stack_##TYPE##_top(stack_##TYPE *stk\
   DEFINE_STACK_INIT(TYPE)                                                      \
   DEFINE_STACK_DESTROY(TYPE)                                                   \
   DEFINE_STACK_VALIDATE(TYPE)                                                  \
-  DEFINE_STACK_FAIL(TYPE)                                                      \
   DEFINE_STACK_DUMP(TYPE, TYPE_FORMAT)                                         \
   DEFINE_STACK_EMPTY(TYPE, TYPE_FORMAT)                                        \
   DEFINE_STACK_SIZE(TYPE, TYPE_FORMAT)                                         \

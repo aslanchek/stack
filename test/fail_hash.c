@@ -1,10 +1,9 @@
-#include <stack.h>
-
-#define VERBOSE
+#include "../stack.h"
 
 DEFINE_STACK(int, "%d")
 
 int main() {
+
     stack_int stk = stack_int_init();
 
     stack_int_push(&stk, 5, LOGINFO);
@@ -13,10 +12,11 @@ int main() {
 
     STACK_DUMP(&stk, int);
 
-    char *addr = (char *) stk.__data_cnr2;
-    *addr = 0xbb;
+    *stk.__arr = 2;
 
-    stack_int_push(&stk, 8, LOGINFO);
+    STACK_DUMP(&stk, int);
+
+    stack_int_pop(&stk, LOGINFO);
 
     stack_int_destroy(&stk);
     return 0;
