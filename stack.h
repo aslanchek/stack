@@ -301,6 +301,9 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk, STACK_STATUS statuscode,\
     IF_USEDUMP(\
     \
     \
+    if (statuscode == STACK_STATUS_OK) {\
+        statuscode = stack_##TYPE##_validate(stk);\
+    }\
     fprintf(stderr, LOG_PATTERN "stack_dump()\n", filename, fileline, funcname);\
     fprintf(stderr, "---STACK DUMP---\n");\
     fprintf(stderr, "STATUS: %s\n", stack_status2str(statuscode));\
