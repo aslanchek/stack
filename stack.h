@@ -236,8 +236,8 @@ STACK_STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
     assert(stk->__data_cnr2);\
     assert(*stk->__data_cnr1 ^ STATIC_CANARY_VAL == 0);\
     assert(*stk->__data_cnr2 ^ STATIC_CANARY_VAL == 0);\
-    assert(*stk->__strct_cnr1 ^ STATIC_CANARY_VAL == 0);\
-    assert(*stk->__strct_cnr2 ^ STATIC_CANARY_VAL == 0);\
+    assert(stk->__strct_cnr1 ^ STATIC_CANARY_VAL == 0);\
+    assert(stk->__strct_cnr2 ^ STATIC_CANARY_VAL == 0);\
     )\
     if (!stk) {\
         return STACK_STATUS_INVSTKP;\
