@@ -205,12 +205,6 @@ void stack_##TYPE##_destroy(stack_##TYPE *stk) {\
 }\
 
 
-IF_CANARY(
-int _stack_canary_validate(const CANARY_TYPE *ptr) {
-    return *ptr == STATIC_CANARY_VAL;
-})
-
-
 #define DEFINE_STACK_VALIDATE(TYPE)\
 __attribute__((weak))\
 STACK_STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
@@ -221,8 +215,8 @@ STACK_STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
     IF_CANARY(\
     assert(stk->__data_cnr1);\
     assert(stk->__data_cnr2);\
-    assert(_stack_canary_validate(stk->__data_cnr1));\
-    assert(_stack_canary_validate(stk->__data_cnr2));\
+    assert(*stk->__data_cnr1 ^ STATIC_CANARY_VAL == 0);\
+    assert(*stk->__data_cnr2 ^ STATIC_CANARY_VAL == 0);\
     )\
     if (!stk) {\
         return STACK_STATUS_INVSTKP;\
@@ -243,10 +237,10 @@ STACK_STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
     if (!stk->__data_cnr2) {\
         return STACK_STATUS_INVDRCNR;\
     }\
-    if (!_stack_canary_validate(stk->__data_cnr1)) {\
+    if (*stk->__data_cnr1 ^ STATIC_CANARY_VAL) {\
         return STACK_STATUS_BFOVFLLC;\
     }\
-    if (!_stack_canary_validate(stk->__data_cnr2)) {\
+    if (*stk->__data_cnr2 ^ STATIC_CANARY_VAL) {\
         return STACK_STATUS_BFOVFLRC;\
     }\
     )\
@@ -327,10 +321,11 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk, STACK_STATUS statuscode,\
     }\
     fprintf(stderr, " {\n");\
     IF_CANARY(\
+    fprintf(stderr, "    canary1 = 0x%lx ", *stk->__data_cnr1);\
     if (statuscode == STACK_STATUS_INVDLCNR) {\
-        fprintf(stderr, "    canary1 = %s\n", "failed");\
+        fprintf(stderr, "[%s]\n", "failed");\
     } else {\
-        fprintf(stderr, "    canary1 = %s\n", _stack_canary_validate(stk->__data_cnr1) ? "ok" : "failed");\
+        fprintf(stderr, "[%s]\n", *stk->__data_cnr1 ^ STATIC_CANARY_VAL ? "failed" : "ok");\
     }\
     )\
     if (statuscode != STACK_STATUS_ZEROCAP) {\
@@ -352,10 +347,11 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk, STACK_STATUS statuscode,\
         fprintf(stderr, "     invalid data...\n");\
     }\
     IF_CANARY(\
+    fprintf(stderr, "    canary2 = 0x%lx ", *stk->__data_cnr2);\
     if (statuscode == STACK_STATUS_INVDRCNR) {\
-        fprintf(stderr, "    canary2 = %s\n", "failed");\
+        fprintf(stderr, "[%s]\n", "failed");\
     } else {\
-        fprintf(stderr, "    canary2 = %s\n", _stack_canary_validate(stk->__data_cnr2) ? "ok" : "failed");\
+        fprintf(stderr, "[%s]\n", *stk->__data_cnr2 ^ STATIC_CANARY_VAL ? "failed" : "ok");\
     }\
     )\
     fprintf(stderr, "  }\n");\
@@ -369,7 +365,7 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk, STACK_STATUS statuscode,\
 #define LOGINFO __FILE__, __LINE__, __PRETTY_FUNCTION__
 
 
-#define STACK_DUMP(stk, TYPE) _stack_##TYPE##_dump(stk, 0, (#stk), LOGINFO)
+#define STACK_DUMP(stk, TYPE) _stack_##TYPE##_dump(stk, STACK_STATUS_OK, (#stk), LOGINFO)
 
 
 #define DEFINE_STACK_EMPTY(TYPE, TYPE_FORMAT)\
