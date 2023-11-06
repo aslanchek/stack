@@ -68,6 +68,8 @@ typedef enum {
     STACK_STATUS_BFOVFLRC  = 8, // buffer overflow attack detected: right canary invaded
     STACK_STATUS_POPEMPTY  = 9, // pop empty stack
     STACK_STATUS_EMPTYACS  = 10,// accessing empty stack
+    STACK_STATUS_BUFFEROVERFLOW_STRUCT_LEFT_CANARY = 11, // struct left canary invaded
+    STACK_STATUS_BUFFEROVERFLOW_STRUCT_RIGHT_CANARY = 12, // struct right canary invaded
 } STACK_STATUS;
 
 
@@ -79,13 +81,16 @@ static char *STRSTACK_STATUS[] = {
    /*4*/ "invalid size-capacity relation",
    /*5*/ "data left canary invalidated",
    /*6*/ "data right canary invalidated",
-   /*7*/ "buffer overflow attack detected: left canary invaded",
-   /*8*/ "buffer overflow attack detected: right canary invaded",
+   /*7*/ "buffer overflow detected: data left canary invaded",
+   /*8*/ "buffer overflow detected: data right canary invaded",
    /*9*/ "pop empty stack",
    /*10*/ "accessing empty stack",
+   /*11*/ "buffer overflow detected: struct left canary invaded",
+   /*12*/ "buffer overflow detected: struct left canary invaded",
 };
 
 
+__attribute__((weak))\
 char *stack_status2str(STACK_STATUS sts) {
     return STRSTACK_STATUS[sts];
 }
@@ -94,7 +99,7 @@ char *stack_status2str(STACK_STATUS sts) {
 #ifdef HASH
 #define IF_HASH(...) __VA_ARGS__
 #define ELSE_HASH(...)
-unsigned int MurmurHash2 (char * key, size_t len) {
+uint32_t MurmurHash2 (char * key, size_t len) {
     const uint32_t m = 0x5bd1e995;
     const uint32_t seed = 0;
     const uint32_t r = 24;
@@ -150,7 +155,7 @@ unsigned int MurmurHash2 (char * key, size_t len) {
 #define DEFINE_STACK_STRUCT(TYPE)\
   typedef struct {\
     IF_CANARY(\
-    const CANARY_TYPE *__strct_cnr1;\
+    const CANARY_TYPE __strct_cnr1;\
     const CANARY_TYPE *__data_cnr1;\
     const CANARY_TYPE *__data_cnr2;\
     )\
@@ -161,7 +166,7 @@ unsigned int MurmurHash2 (char * key, size_t len) {
     size_t __size;\
     TYPE *__arr;\
     IF_CANARY(\
-    const CANARY_TYPE *__strct_cnr2;\
+    const CANARY_TYPE __strct_cnr2;\
     )\
   } stack_##TYPE;\
 
@@ -177,10 +182,15 @@ stack_##TYPE stack_##TYPE##_init() {\
     newstk.__arr = (TYPE *)((char *)malloc(((newstk.__cpct * sizeof(TYPE) - 1) / 8 + 1) * 8 + 2 * sizeof(CANARY_TYPE)) + sizeof(CANARY_TYPE));\
     newstk.__data_cnr1 = (CANARY_TYPE *)((char *)newstk.__arr - sizeof(CANARY_TYPE));\
     newstk.__data_cnr2 = (CANARY_TYPE *)((char *)newstk.__arr + ((newstk.__cpct * sizeof(TYPE) - 1) / 8 + 1) * 8);\
-    CANARY_TYPE *tmp1 = (CANARY_TYPE *)newstk.__data_cnr1;\
-    *tmp1 = STATIC_CANARY_VAL;\
-    CANARY_TYPE *tmp2 = (CANARY_TYPE *)newstk.__data_cnr2;\
-    *tmp2 = STATIC_CANARY_VAL;\
+    CANARY_TYPE *tmp;\
+    tmp = (CANARY_TYPE *)newstk.__data_cnr1;\
+    *tmp = STATIC_CANARY_VAL;\
+    tmp = (CANARY_TYPE *)newstk.__data_cnr2;\
+    *tmp = STATIC_CANARY_VAL;\
+    tmp = (CANARY_TYPE *)&newstk.__strct_cnr1;\
+    *tmp = STATIC_CANARY_VAL;\
+    tmp = (CANARY_TYPE *)&newstk.__strct_cnr2;\
+    *tmp = STATIC_CANARY_VAL;\
     )\
     ELSE_CANARY(\
     newstk.__arr = malloc(newstk.__cpct * sizeof(TYPE));\
@@ -196,6 +206,15 @@ void stack_##TYPE##_destroy(stack_##TYPE *stk) {\
     stk->__cpct = 0;\
     stk->__size = 0;\
     IF_CANARY(\
+    CANARY_TYPE *tmp;\
+    tmp = (CANARY_TYPE *)stk->__data_cnr1;\
+    *tmp = 0;\
+    tmp = (CANARY_TYPE *)stk->__data_cnr2;\
+    *tmp = 0;\
+    tmp = (CANARY_TYPE *)&stk->__strct_cnr1;\
+    *tmp = 0;\
+    tmp = (CANARY_TYPE *)&stk->__strct_cnr2;\
+    *tmp = 0;\
     free((char *)stk->__arr - sizeof(CANARY_TYPE));\
     )\
     ELSE_CANARY(\
@@ -217,6 +236,8 @@ STACK_STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
     assert(stk->__data_cnr2);\
     assert(*stk->__data_cnr1 ^ STATIC_CANARY_VAL == 0);\
     assert(*stk->__data_cnr2 ^ STATIC_CANARY_VAL == 0);\
+    assert(*stk->__strct_cnr1 ^ STATIC_CANARY_VAL == 0);\
+    assert(*stk->__strct_cnr2 ^ STATIC_CANARY_VAL == 0);\
     )\
     if (!stk) {\
         return STACK_STATUS_INVSTKP;\
@@ -242,6 +263,12 @@ STACK_STATUS stack_##TYPE##_validate(stack_##TYPE *stk) {\
     }\
     if (*stk->__data_cnr2 ^ STATIC_CANARY_VAL) {\
         return STACK_STATUS_BFOVFLRC;\
+    }\
+    if (stk->__strct_cnr1 ^ STATIC_CANARY_VAL) {\
+        return STACK_STATUS_BUFFEROVERFLOW_STRUCT_LEFT_CANARY;\
+    }\
+    if (stk->__strct_cnr2 ^ STATIC_CANARY_VAL) {\
+        return STACK_STATUS_BUFFEROVERFLOW_STRUCT_RIGHT_CANARY;\
     }\
     )\
     return STACK_STATUS_OK;\
@@ -310,6 +337,10 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk, STACK_STATUS statuscode,\
         return;\
     }\
     fprintf(stderr, " {\n");\
+    IF_CANARY(\
+    fprintf(stderr, "struct canary1 = 0x%lx ", stk->__strct_cnr1);\
+    fprintf(stderr, "[%s]\n", statuscode == STACK_STATUS_BUFFEROVERFLOW_STRUCT_LEFT_CANARY ? "failed" : "ok");\
+    )\
     fprintf(stderr,\
         "  capacity = %zu\n"\
         "  size     = %zu\n"\
@@ -321,10 +352,11 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk, STACK_STATUS statuscode,\
     }\
     fprintf(stderr, " {\n");\
     IF_CANARY(\
-    fprintf(stderr, "    canary1 = 0x%lx ", *stk->__data_cnr1);\
     if (statuscode == STACK_STATUS_INVDLCNR) {\
+        fprintf(stderr, "    canary1 = invalid ");\
         fprintf(stderr, "[%s]\n", "failed");\
     } else {\
+        fprintf(stderr, "    canary1 = 0x%lx ", *stk->__data_cnr1);\
         fprintf(stderr, "[%s]\n", *stk->__data_cnr1 ^ STATIC_CANARY_VAL ? "failed" : "ok");\
     }\
     )\
@@ -347,14 +379,19 @@ void _stack_##TYPE##_dump(stack_##TYPE *stk, STACK_STATUS statuscode,\
         fprintf(stderr, "     invalid data...\n");\
     }\
     IF_CANARY(\
-    fprintf(stderr, "    canary2 = 0x%lx ", *stk->__data_cnr2);\
     if (statuscode == STACK_STATUS_INVDRCNR) {\
+        fprintf(stderr, "    canary2 = invalid ");\
         fprintf(stderr, "[%s]\n", "failed");\
     } else {\
+        fprintf(stderr, "    canary2 = 0x%lx ", *stk->__data_cnr2);\
         fprintf(stderr, "[%s]\n", *stk->__data_cnr2 ^ STATIC_CANARY_VAL ? "failed" : "ok");\
     }\
     )\
     fprintf(stderr, "  }\n");\
+    IF_CANARY(\
+    fprintf(stderr, "struct canary2 = 0x%lx ", stk->__strct_cnr2);\
+    fprintf(stderr, "[%s]\n", statuscode == STACK_STATUS_BUFFEROVERFLOW_STRUCT_RIGHT_CANARY ? "failed" : "ok");\
+    )\
     fprintf(stderr, "}\n");\
     \
     \
