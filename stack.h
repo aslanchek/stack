@@ -502,6 +502,7 @@ int stack_##TYPE##_pop(stack_##TYPE *stk\
         )\
     }\
     stk->__size--;\
+    return 0;\
   }\
 
 #define DEFINE_STACK_TOP(TYPE, TYPE_FORMAT)\
