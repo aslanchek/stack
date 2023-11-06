@@ -439,6 +439,7 @@ int stack_##TYPE##_resize(stack_##TYPE *stk, size_t newcpct\
     ELSE_CANARY(\
     stk->__arr = reallocarray(stk->__arr, newcpct, sizeof(TYPE));\
     )\
+    return 0;\
   }
 
 #define DEFINE_STACK_PUSH(TYPE, TYPE_FORMAT)\
@@ -467,7 +468,7 @@ int stack_##TYPE##_push(stack_##TYPE *stk, TYPE val\
         )\
     }\
     stk->__arr[stk->__size++] = val;\
-    return 1;\
+    return 0;\
   }\
 
 #define DEFINE_STACK_POP(TYPE, TYPE_FORMAT)\
@@ -513,7 +514,7 @@ TYPE stack_##TYPE##_top(stack_##TYPE *stk\
     if (vcode) {\
         _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_top()");\
         _stack_fail(vcode, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname) );\
-        return (TYPE)-1;\
+        return (TYPE){-1};\
     }\
     if (stk->__size == 0) {\
         _stack_fail(STACK_STATUS_EMPTYACS, "stack_" #TYPE "_top()" IF_VERBOSE(, filename, fileline, funcname ));\
