@@ -520,7 +520,7 @@ int stack_##TYPE##_pop(stack_##TYPE *stk\
         return -1;\
     }\
     if (stk->__size == 0) {\
-        _stack_##TYPE##_dump(stk, STACK_STATUS_POPEMPTY, NULL, __FILE__, __LINE__, "stack_"#TYPE"_empty()");\
+        _stack_##TYPE##_dump(stk, STACK_STATUS_POPEMPTY, NULL, __FILE__, __LINE__, "stack_"#TYPE"_pop()");\
         _stack_fail(STACK_STATUS_POPEMPTY, "stack_" #TYPE "_pop()" IF_VERBOSE(, filename, fileline, funcname) );\
         return -1;\
         }\
