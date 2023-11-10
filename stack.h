@@ -289,7 +289,7 @@ void _stack_fail(const STACK_STATUS status, const char *methodname
     ) {
     IF_VERBOSE(
     fprintf(stderr, RED("[stack fail]") " %s:%zu in (%s): Validation "
-                                        "failed: %s status: %s[%d]\n", 
+                                        "failed: %s status: %s[%u]\n", 
                        filename, fileline, funcname, methodname, stack_status2str(status), status);
     )
     #ifndef NOFAIL
@@ -437,7 +437,7 @@ size_t stack_##TYPE##_size(stack_##TYPE *stk\
     if (vcode) {\
         _stack_##TYPE##_dump(stk, vcode, NULL, __FILE__, __LINE__, "stack_"#TYPE"_size()");\
         _stack_fail(vcode, "stack_" #TYPE "size()" IF_VERBOSE(, filename, fileline, funcname) );\
-        return -1;\
+        return (size_t)-1;\
     })\
     IF_VERBOSE(\
     fprintf(stderr,LOG_PATTERN "stack_" #TYPE "_size()" LOG_RETURNS "%zu" "\n", filename, fileline, funcname, stk->__size);\
